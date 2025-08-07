@@ -188,8 +188,6 @@ def get_difal_pa(preco_liquido,ano,uf_saida,uf_entrada,ibs_cbs_na_base=False):
     #Se tiver IBS e CBS na base, ela integra o bc_tributo no numerador    
     bc_tributo = (preco_liquido) / (1 - aliquota_efetiva - aliquota_pis_cofins)
     tributo_efetivo = bc_tributo * aliquota_efetiva
-
-    print(f'Tributo efetivo: {tributo_efetivo} - BC TRIBUTO {bc_tributo}')
     
     difal_efetivo = ((bc_tributo - tributo_efetivo) / (1 - (0.19 * percentual_efetivo))) * (0.19 * percentual_efetivo) - tributo_efetivo
     
@@ -219,14 +217,29 @@ def calculadora_lucro_real(preco_liquido,ano,aliquota,difal=0,credito_pis_cofins
 
     #difal_efetivo = ((bc_tributo - tributo_efetivo) / (1 - 0.19)) * 0.19 - tributo_efetivo if difal else 0
     pis_cofins_efetivo = bc_tributo * aliquota_pis_cofins
-    print(f'BC TRIBUTO LR {bc_tributo} - TRIBUTO {tributo_efetivo} - DIFAL {difal} - CREDITO PIS COFINS {credito_pis_cofins} - pis cofins {pis_cofins_efetivo}')
     
     if not credito_pis_cofins:
         custo = preco_liquido + tributo_efetivo + difal + pis_cofins_efetivo
     else:
         custo = preco_liquido + tributo_efetivo + difal
-    
-    return custo
+
+    aliquota_ibs = get_aliquota_ibs(ano)
+    aliquota_cbs = get_aliquota_cbs(ano)
+
+    ibs = preco_liquido * aliquota_ibs
+    cbs = preco_liquido * aliquota_cbs
+
+
+
+    data = {
+        'custo':custo,
+        'tributo_efetivo':tributo_efetivo,
+        'bc_tributo':bc_tributo,
+        'pis_cofins_efetivo':pis_cofins_efetivo,
+        'ibs':ibs,
+        'cbs':cbs
+    }
+    return data
 
 def get_preco_liquido_lucro_presumido(valor_total,aliquota_tributo,aliquota_pis_cofins,tipo):
     tributo_efetivo = valor_total * aliquota_tributo
@@ -270,13 +283,31 @@ def calculadora_lucro_presumido(preco_liquido,ano,aliquota,difal,credito_pis_cof
     csll_efetivo = aliquota_csll * bc_tributo
     valor_credito_pis_cofins = aliquota_pis_cofins_credito * bc_tributo
 
-    print(f'IRPJ {irpj_efetivo} -  CSLL {csll_efetivo}')
 
     if credito_pis_cofins:
         custo = preco_liquido + tributo_efetivo + difal + irpj_efetivo + csll_efetivo + pis_cofins_efetivo - valor_credito_pis_cofins
     else:
         custo = preco_liquido + tributo_efetivo + difal + irpj_efetivo + csll_efetivo + pis_cofins_efetivo
-    return custo
+    
+    aliquota_ibs = get_aliquota_ibs(ano)
+    aliquota_cbs = get_aliquota_cbs(ano)
+
+    ibs = preco_liquido * aliquota_ibs
+    cbs = preco_liquido * aliquota_cbs
+
+
+
+    data = {
+        'custo':custo,
+        'tributo_efetivo':tributo_efetivo,
+        'bc_tributo':bc_tributo,
+        'irpj_efetivo':irpj_efetivo,
+        'csll_efetivo':csll_efetivo,
+        'pis_cofins_efetivo':pis_cofins_efetivo,
+        'ibs':ibs,
+        'cbs':cbs
+    }
+    return data
 
 
 def faixa_simples_nacional(rbt12):
@@ -371,6 +402,7 @@ def calcular_simples_comparativo(anexo: str, rbt12: float, faturamento: float, a
     credito_cbs_simples = (pis + cofins) * cbs_percent
 
     # Custo real no Simples Nacional (sem possibilidade de crédito cheio)
+    print(f'Credito de PIS e COFINS? {credito_pis_cofins}')
     if credito_pis_cofins and ano <= 2026:
         valor_credito_pis_cofins = faturamento * 0.0925
     else:
