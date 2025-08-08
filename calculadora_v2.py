@@ -95,31 +95,31 @@ def get_percentual_efetivo(ano):
 
     return data[str(ano)]
 
-def get_aliquota_cbs(ano: int) -> float:
+def get_aliquota_cbs(aliquota,ano: int) -> float:
     aliquotas = {
         2026: 0.0000,
-        2027: 0.0925,
-        2028: 0.0925,
-        2029: 0.0925,
-        2030: 0.0925,
-        2031: 0.0925,
-        2032: 0.0925,
-        2033: 0.0925,
+        2027: aliquota,
+        2028: aliquota,
+        2029: aliquota,
+        2030: aliquota,
+        2031: aliquota,
+        2032: aliquota,
+        2033: aliquota,
     }
     if ano not in aliquotas:
         raise ValueError("Ano fora do intervalo permitido (2026 a 2033)")
     return aliquotas[ano]
 
-def get_aliquota_ibs(ano: int) -> float:
+def get_aliquota_ibs(aliquota,ano: int) -> float:
     aliquotas = {
-        2026: 0.0000,
-        2027: 0.0010,
-        2028: 0.0010,
-        2029: 0.0188,
-        2030: 0.0375,
-        2031: 0.0563,
-        2032: 0.0750,
-        2033: 0.1875,
+        2026: 0,
+        2027: 0.001,
+        2028: 0.001,
+        2029: aliquota * 0.1,
+        2030: aliquota * 0.2,
+        2031: aliquota * 0.3,
+        2032: aliquota * 0.4,
+        2033: aliquota
     }
     if ano not in aliquotas:
         raise ValueError("Ano fora do intervalo permitido (2026 a 2033)")
@@ -174,19 +174,30 @@ def obter_aliquota_icms_pa(uf_vendedor: str,uf_tomador: str = "PA", ) -> float:
         # Operações entre regiões similares (N x N, SE x SE, etc.) = 12%
         return aliquota_12
 
-def get_difal_pa(preco_liquido,ano,uf_saida,uf_entrada,ibs_cbs_na_base=False):
+def get_difal_pa(preco_liquido,ano,uf_saida,uf_entrada,aliquota_pis_cofins,aliquota_ibs,aliquota_cbs,ibs_cbs_na_base=False):
     #Dado um determinado preco liquido, o objetivo é retornar o custo efetivo ou ganho efetivo em uma determinada operação
     #Preço liquido é o valor deduzidos os impostos pagos
     
     #Recupera a aliquota com base no estado do fornecedor
     aliquota = obter_aliquota_icms_pa(uf_vendedor=uf_saida,uf_tomador=uf_entrada)
 
-    aliquota_pis_cofins = 0.0925 if ano <= 2026 else 0
+    aliquota_pis_cofins = aliquota_pis_cofins if ano <= 2026 else 0
     percentual_efetivo = get_percentual_efetivo(ano)
     aliquota_efetiva = aliquota * percentual_efetivo
 
+    aliquota_ibs = get_aliquota_ibs(aliquota_ibs,ano)
+    aliquota_cbs = get_aliquota_cbs(aliquota_cbs,ano)
+
+    ibs = preco_liquido * aliquota_ibs
+    cbs = preco_liquido * aliquota_cbs
+
     #Se tiver IBS e CBS na base, ela integra o bc_tributo no numerador    
-    bc_tributo = (preco_liquido) / (1 - aliquota_efetiva - aliquota_pis_cofins)
+    ibs = 0
+    cbs = 0
+    if ibs_cbs_na_base:
+        bc_tributo = (preco_liquido + ibs + cbs) / (1 - aliquota_efetiva - aliquota_pis_cofins)
+    else:
+        bc_tributo = (preco_liquido) / (1 - aliquota_efetiva - aliquota_pis_cofins)
     tributo_efetivo = bc_tributo * aliquota_efetiva
     
     difal_efetivo = ((bc_tributo - tributo_efetivo) / (1 - (0.19 * percentual_efetivo))) * (0.19 * percentual_efetivo) - tributo_efetivo
@@ -201,7 +212,7 @@ def get_preco_liquido_lucro_real(valor_total,aliquota_tributo,aliquota_pis_cofin
 
     return preco_liquido
 
-def calculadora_lucro_real(preco_liquido,ano,aliquota,difal=0,credito_pis_cofins=False,ibs_cbs_na_base=False):
+def calculadora_lucro_real(preco_liquido,ano,tipo,aliquota,uf_entrada='PA', uf_saida='PA',aliquota_ibs=0.177,aliquota_cbs=0.088,credito_pis_cofins=False,ibs_cbs_na_base=False):
     #Dado um determinado preco liquido, o objetivo é retornar o custo efetivo ou ganho efetivo em uma determinada operação
     #Preço liquido é o valor deduzidos os impostos pagos
     
@@ -209,28 +220,38 @@ def calculadora_lucro_real(preco_liquido,ano,aliquota,difal=0,credito_pis_cofins
     
     percentual_efetivo = get_percentual_efetivo(ano)
     aliquota_efetiva = aliquota * percentual_efetivo
+
+    aliquota_ibs = get_aliquota_ibs(aliquota_ibs,ano)
+    aliquota_cbs = get_aliquota_cbs(aliquota_cbs,ano)
+
+    ibs = preco_liquido * aliquota_ibs
+    cbs = preco_liquido * aliquota_cbs
     
     #Se tiver IBS e CBS na base, ela integra o bc_tributo no numerador    
-    bc_tributo = (preco_liquido) / (1 - aliquota_efetiva - aliquota_pis_cofins)
-    
+    if ibs_cbs_na_base:
+        bc_tributo = (preco_liquido + ibs + cbs) / (1 - aliquota_efetiva - aliquota_pis_cofins)
+    else:
+        bc_tributo = (preco_liquido) / (1 - aliquota_efetiva - aliquota_pis_cofins)
     tributo_efetivo = bc_tributo * aliquota_efetiva
 
     #difal_efetivo = ((bc_tributo - tributo_efetivo) / (1 - 0.19)) * 0.19 - tributo_efetivo if difal else 0
     pis_cofins_efetivo = bc_tributo * aliquota_pis_cofins
     
-    if not credito_pis_cofins:
-        custo = preco_liquido + tributo_efetivo + difal + pis_cofins_efetivo
+    #aliquota = obter_aliquota_icms_pa(uf_vendedor=uf_saida,uf_tomador=uf_entrada)
+    #DIFAL é uma variavel booleana que indica se o cálculo deve ser feito ou não. Essa info vem
+    if uf_entrada != uf_saida and tipo == 'venda':
+        
+        difal_efetivo = ((bc_tributo - tributo_efetivo) / (1 - (0.19 * percentual_efetivo))) * (0.19 * percentual_efetivo) - tributo_efetivo
     else:
-        custo = preco_liquido + tributo_efetivo + difal
-
-    aliquota_ibs = get_aliquota_ibs(ano)
-    aliquota_cbs = get_aliquota_cbs(ano)
-
-    ibs = preco_liquido * aliquota_ibs
-    cbs = preco_liquido * aliquota_cbs
+        difal_efetivo = 0
 
 
+    if not credito_pis_cofins:
+        custo = preco_liquido + tributo_efetivo + difal_efetivo + pis_cofins_efetivo
+    else:
+        custo = preco_liquido + tributo_efetivo + difal_efetivo
 
+    
     data = {
         'custo':custo,
         'tributo_efetivo':tributo_efetivo,
@@ -247,6 +268,8 @@ def get_preco_liquido_lucro_presumido(valor_total,aliquota_tributo,aliquota_pis_
     aliquota_irpj = 0.15
     aliquota_csll = 0.09
 
+    print(tributo_efetivo,pis_cofins_efetivo)
+    
     if tipo == 'servico':
         base_presumida = 0.32
 
@@ -258,11 +281,12 @@ def get_preco_liquido_lucro_presumido(valor_total,aliquota_tributo,aliquota_pis_
     irpj = valor_total * base_presumida * aliquota_irpj
     csll = valor_total * base_presumida * aliquota_csll
 
+    print(irpj,csll)
     preco_liquido = valor_total - tributo_efetivo - pis_cofins_efetivo - irpj - csll
 
     return preco_liquido
 
-def calculadora_lucro_presumido(preco_liquido,ano,aliquota,difal,credito_pis_cofins=False,ibs_cbs_na_base=False):
+def calculadora_lucro_presumido(preco_liquido,ano,tipo,aliquota,uf_entrada='PA', uf_saida='PA',aliquota_ibs=0.177,aliquota_cbs=0.088,credito_pis_cofins=False,ibs_cbs_na_base=False):
     #Dado um determinado preco liquido, o objetivo é retornar o custo efetivo ou ganho efetivo em uma determinada operação
     #Preço liquido é o valor deduzidos os impostos pagos
     
@@ -272,30 +296,55 @@ def calculadora_lucro_presumido(preco_liquido,ano,aliquota,difal,credito_pis_cof
     percentual_efetivo = get_percentual_efetivo(ano)
     aliquota_efetiva = aliquota * percentual_efetivo
     
-    aliquota_irpj = 0.08 * 0.15
-    aliquota_csll = 0.08 * 0.09
-    #Se tiver IBS e CBS na base, ela integra o bc_tributo no numerador    
-    bc_tributo = (preco_liquido) / (1 - aliquota_efetiva - aliquota_pis_cofins - aliquota_csll - aliquota_irpj)
 
-    tributo_efetivo = bc_tributo * aliquota_efetiva
-    pis_cofins_efetivo = bc_tributo * aliquota_pis_cofins
-    irpj_efetivo = aliquota_irpj * bc_tributo
-    csll_efetivo = aliquota_csll * bc_tributo
-    valor_credito_pis_cofins = aliquota_pis_cofins_credito * bc_tributo
+    if tipo == 'venda':
+        aliquota_irpj = 0.08 * 0.15
+        aliquota_csll = 0.08 * 0.09
+    if tipo == 'servico':
+        aliquota_irpj = 0.32 * 0.15
+        aliquota_csll = 0.32 * 0.09
+    if tipo == 'industria':
+        aliquota_irpj = 0.12 * 0.15
+        aliquota_csll = 0.12 * 0.09
 
+   
 
-    if credito_pis_cofins:
-        custo = preco_liquido + tributo_efetivo + difal + irpj_efetivo + csll_efetivo + pis_cofins_efetivo - valor_credito_pis_cofins
-    else:
-        custo = preco_liquido + tributo_efetivo + difal + irpj_efetivo + csll_efetivo + pis_cofins_efetivo
-    
-    aliquota_ibs = get_aliquota_ibs(ano)
-    aliquota_cbs = get_aliquota_cbs(ano)
+    aliquota_ibs = get_aliquota_ibs(aliquota_ibs,ano)
+    aliquota_cbs = get_aliquota_cbs(aliquota_cbs,ano)
 
     ibs = preco_liquido * aliquota_ibs
     cbs = preco_liquido * aliquota_cbs
 
 
+    denominador=1 - aliquota_efetiva - ((1 - aliquota_efetiva) * aliquota_pis_cofins) - aliquota_csll - aliquota_irpj
+
+
+    #Se tiver IBS e CBS na base, ela integra o bc_tributo no numerador    
+    if ibs_cbs_na_base:
+        bc_tributo = (preco_liquido + ibs + cbs) / denominador
+    else:
+        bc_tributo = (preco_liquido) / denominador
+
+
+    #print(aliquota_efetiva,aliquota_pis_cofins,aliquota_csll,aliquota_irpj)
+    tributo_efetivo = bc_tributo * aliquota_efetiva
+    pis_cofins_efetivo = bc_tributo * ( 1 - aliquota_efetiva) * aliquota_pis_cofins
+    irpj_efetivo = aliquota_irpj * bc_tributo
+    csll_efetivo = aliquota_csll * bc_tributo
+    valor_credito_pis_cofins = aliquota_pis_cofins_credito * bc_tributo
+
+
+    if uf_entrada != uf_saida and tipo == 'venda':
+        difal_efetivo = ((bc_tributo - tributo_efetivo) / (1 - (0.19 * percentual_efetivo))) * (0.19 * percentual_efetivo) - tributo_efetivo
+    else:
+        difal_efetivo = 0
+
+    if credito_pis_cofins:
+        custo = preco_liquido + tributo_efetivo + difal_efetivo + irpj_efetivo + csll_efetivo + pis_cofins_efetivo - valor_credito_pis_cofins
+    else:
+        custo = preco_liquido + tributo_efetivo + difal_efetivo + irpj_efetivo + csll_efetivo + pis_cofins_efetivo
+    
+    
 
     data = {
         'custo':custo,
@@ -308,7 +357,6 @@ def calculadora_lucro_presumido(preco_liquido,ano,aliquota,difal,credito_pis_cof
         'cbs':cbs
     }
     return data
-
 
 def faixa_simples_nacional(rbt12):
     """
@@ -422,54 +470,3 @@ def calcular_simples_comparativo(anexo: str, rbt12: float, faturamento: float, a
         'custo_efetivo_simples': custo_simples
     }
 
-"""
-if __name__ == "__main__":
-    regime_tributario = 'lucro_presumido'
-    if regime_tributario == 'lucro_real':
-        aliquota = 0.05
-        total_da_nota = 1000
-        aliquota_pis_cofins = 0.0925
-        tipo = 'serviço'
-        ano = 2033
-        uf_saida = 'PA'
-        uf_entrada = 'PA'
-        credito_pis_cofins = True
-
-        preco_liquido = get_preco_liquido_lucro_real(total_da_nota,aliquota,aliquota_pis_cofins)
-        print(f'O preço líquido é {preco_liquido}')
-        
-        
-        if tipo == 'venda':
-            difal = get_difal_pa(preco_liquido,ano,uf_saida,uf_entrada)
-        else:
-            difal = 0
-
-        print(difal)
-        data = calculadora_lucro_real(preco_liquido,ano,aliquota,credito_pis_cofins=False,difal=difal,credito_pis_cofins=credito_pis_cofins)
-        print(data)
-
-    elif regime_tributario == 'lucro_presumido':
-        uf_saida = 'PA'
-        uf_entrada = 'PA'
-
-        aliquota = 0.19
-        total_da_nota = 1000
-        aliquota_pis_cofins = 0.0365
-        tipo = 'venda'
-        ano = 2033
-        preco_liquido = get_preco_liquido_lucro_presumido(total_da_nota,aliquota,aliquota_pis_cofins,tipo=tipo)
-
-        if tipo == 'venda':
-            difal = get_difal_pa(preco_liquido,ano,uf_saida,uf_entrada)
-        else:
-            difal = 0
-        c = calculadora_lucro_presumido(preco_liquido,ano,aliquota,difal)
-        
-
-
-    elif regime_tributario == 'simples_nacional':
-        ...
-
-    else:
-        ...
-        """

@@ -17,7 +17,7 @@ def create_app():
     # CORS configurado para o domínio do Vercel
     CORS(
         app,
-        resources={r"/*": {"origins": ["https://calculadora-da-reforma-frontend.vercel.app"]}},
+        resources={r"/*": {"origins": ["https://calculadora-da-reforma-frontend.vercel.app",'http://localhost:5173']}},
         allow_headers=["Content-Type", "Authorization"],
         methods=["GET", "POST", "OPTIONS"],
         max_age=86400,
@@ -50,21 +50,21 @@ def create_app():
             valor_total=float(data["valor_total"]),
             aliquota_tributo=float(data["aliquota_tributo"]),
             aliquota_pis_cofins=0.0365,
-            tipo=data["tipo"],
+            tipo=data["tipo"]
         )
 
-        difal = (
-            get_difal_pa(preco_liquido, int(data["ano"]), data["uf_saida"], data["uf_entrada"])
-            if data["tipo"] == "venda"
-            else 0
-        )
 
         resultado = calculadora_lucro_presumido(
             preco_liquido=preco_liquido,
             ano=int(data["ano"]),
             aliquota=float(data["aliquota_tributo"]),
-            difal=difal,
+            uf_entrada=data['uf_entrada'],
+            uf_saida=data['uf_saida'],
             credito_pis_cofins=bool(data.get("credito_pis_cofins", False)),
+            aliquota_ibs=data['aliquota_ibs'] * ( 1 - data['percentual_de_reducao_ibs_cbs']),
+            aliquota_cbs=data['aliquota_cbs'] * ( 1 - data['percentual_de_reducao_ibs_cbs']),
+            tipo=data["tipo"],
+            ibs_cbs_na_base=data['ibs_cbs_na_base']
         )
 
         return jsonify({
@@ -85,21 +85,22 @@ def create_app():
         preco_liquido = get_preco_liquido_lucro_real(
             valor_total=float(data["valor_total"]),
             aliquota_tributo=float(data["aliquota_tributo"]),
-            aliquota_pis_cofins=0.0925,
+            aliquota_pis_cofins=0.0925
         )
 
-        difal = (
-            get_difal_pa(preco_liquido, int(data["ano"]), data["uf_saida"], data["uf_entrada"])
-            if data["tipo"] == "venda"
-            else 0
-        )
+        
 
         resultado = calculadora_lucro_real(
             preco_liquido=preco_liquido,
             ano=int(data["ano"]),
             aliquota=float(data["aliquota_tributo"]),
-            difal=difal,
             credito_pis_cofins=bool(data.get("credito_pis_cofins", False)),
+            aliquota_ibs=data['aliquota_ibs'] * ( 1 - data['percentual_de_reducao_ibs_cbs']),
+            aliquota_cbs=data['aliquota_cbs'] * ( 1 - data['percentual_de_reducao_ibs_cbs']),
+            ibs_cbs_na_base=data['ibs_cbs_na_base'],
+            tipo=data['tipo'],
+            uf_entrada=data['uf_entrada'],
+            uf_saida=data['uf_saida'],
         )
 
         return jsonify({
